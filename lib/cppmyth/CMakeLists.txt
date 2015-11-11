@@ -46,13 +46,6 @@ if (NOT WIN32 AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX))
     add_definitions ("-fPIC")
   endif ()
   include (CheckLibraryExists)
-  include (CheckAtomic)
-  if (HAS_BUILTIN_SYNC_ADD_AND_FETCH)
-    add_definitions ("-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
-  endif ()
-  if (HAS_BUILTIN_SYNC_SUB_AND_FETCH)
-    add_definitions ("-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
-  endif ()
 endif ()
 
 ###############################################################################

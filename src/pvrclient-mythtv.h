@@ -27,7 +27,7 @@
 #include "demux.h"
 #include "filestreaming.h"
 
-#include <kodi/xbmc_pvr_types.h>
+#include <mrmc/xbmc_pvr_types.h>
 #include <platform/threads/mutex.h>
 #include <mythsharedptr.h>
 #include <mythcontrol.h>

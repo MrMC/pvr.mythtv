@@ -23,7 +23,7 @@
 #include "guidialogyesno.h"
 
 #define GUI_XMLFILENAME       "DialogYesNo.xml"
-#define GUI_DEFAULTSKIN       "skin.confluence"
+#define GUI_DEFAULTSKIN       "skin.mrmc"
 #define CONTROL_HEADING       1
 #define CONTROL_TEXT          9
 #define CONTROL_BUTTON_NO     10

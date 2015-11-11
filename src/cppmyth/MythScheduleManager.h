@@ -25,7 +25,7 @@
 #include "MythEPGInfo.h"
 #include "MythChannel.h"
 
-#include <kodi/xbmc_pvr_types.h>
+#include <mrmc/xbmc_pvr_types.h>
 #include <platform/threads/mutex.h>
 
 #include <vector>
