@@ -21,8 +21,8 @@
  */
 
 #include <platform/os.h>
-#include <kodi/libXBMC_pvr.h>
-#include <kodi/xbmc_codec_types.h>
+#include <mrmc/libXBMC_pvr.h>
+#include <mrmc/xbmc_codec_types.h>
 
 #include "demux.h"
 #include "demuxer/debug.h"
