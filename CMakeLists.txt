@@ -7,13 +7,13 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR})
 enable_language(CXX)
 enable_language(C)
 
-find_package(kodi REQUIRED)
-find_package(kodiplatform REQUIRED)
+find_package(mrmc REQUIRED)
+find_package(mrmcplatform REQUIRED)
 find_package(platform REQUIRED)
 
-include_directories(${kodiplatform_INCLUDE_DIRS}
+include_directories(${mrmcplatform_INCLUDE_DIRS}
                     ${platform_INCLUDE_DIRS}
-                    ${KODI_INCLUDE_DIR}
+                    ${MRMC_INCLUDE_DIR}
                     ${PROJECT_SOURCE_DIR}/lib/cppmyth/src)
 
 add_definitions(-DUSE_DEMUX -D__STDC_FORMAT_MACROS)
@@ -58,15 +58,6 @@ if(WIN32)
   list(APPEND DEPLIBS ws2_32)
 else()
   list(APPEND DEPLIBS m)
-endif()
-
-if(NOT WIN32 AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX))
-  if(HAS_BUILTIN_SYNC_ADD_AND_FETCH)
-    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
-  endif()
-  if(HAS_BUILTIN_SYNC_SUB_AND_FETCH)
-    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
-  endif()
 endif()
 
 set(BUILD_SHARED_LIBS ON)
