@@ -24,7 +24,6 @@
 #include "cppmyth.h"
 #include "fileOps.h"
 #include "categories.h"
-#include "demux.h"
 #include "filestreaming.h"
 
 #include <mrmc/xbmc_pvr_types.h>
@@ -55,7 +54,7 @@ public:
     CONN_ERROR_API_UNAVAILABLE,
   } CONN_ERROR;
 
-  void SetDebug();
+  void SetDebug(bool silent = false);
   bool Connect();
   CONN_ERROR GetConnectionError() const;
   unsigned GetBackendAPIVersion();
@@ -99,8 +98,8 @@ public:
   PVR_ERROR DeleteRecording(const PVR_RECORDING &recording);
   PVR_ERROR DeleteAndForgetRecording(const PVR_RECORDING &recording);
   PVR_ERROR SetRecordingPlayCount(const PVR_RECORDING &recording, int count);
-  //PVR_ERROR SetRecordingLastPlayedPosition(const PVR_RECORDING &recording, int lastplayedposition);
-  //int GetRecordingLastPlayedPosition(const PVR_RECORDING &recording);
+  PVR_ERROR SetRecordingLastPlayedPosition(const PVR_RECORDING &recording, int lastplayedposition);
+  int GetRecordingLastPlayedPosition(const PVR_RECORDING &recording);
   PVR_ERROR GetRecordingEdl(const PVR_RECORDING &recording, PVR_EDL_ENTRY entries[], int *size);
   PVR_ERROR UndeleteRecording(const PVR_RECORDING& recording);
   PVR_ERROR PurgeDeletedRecordings();
@@ -122,12 +121,7 @@ public:
   long long SeekLiveStream(long long iPosition, int iWhence);
   long long LengthLiveStream();
   PVR_ERROR SignalStatus(PVR_SIGNAL_STATUS &signalStatus);
-
-  PVR_ERROR GetStreamProperties(PVR_STREAM_PROPERTIES* pProperties);
-  void DemuxAbort(void);
-  void DemuxFlush(void);
-  DemuxPacket* DemuxRead(void);
-  bool SeekTime(int time, bool backwards, double *startpts);
+  bool IsRealTimeStream() const { return m_liveStream ? true : false; }
 
   time_t GetPlayingTime();
   time_t GetBufferTimeStart();
@@ -159,10 +153,13 @@ private:
   bool m_hang;
   bool m_powerSaving;
 
+  /// Returns true when streaming recorded or live
+  bool IsPlaying() const;
+
   // Backend
   FileOps *m_fileOps;
   MythScheduleManager *m_scheduleManager;
-  PLATFORM::CMutex m_lock;
+  mutable PLATFORM::CMutex m_lock;
 
   // Categories
   Categories m_categories;
@@ -186,9 +183,6 @@ private:
   int FillChannelsAndChannelGroups();
   MythChannel FindChannel(uint32_t channelId) const;
   int FindPVRChannelUid(uint32_t channelId) const;
-
-  // Demuxer TS
-  Demux *m_demux;
 
   // Recordings
   ProgramInfoMap m_recordings;
@@ -220,4 +214,7 @@ private:
    * \brief Parse and fill AV stream infos for a recorded program
    */
   static void FillRecordingAVInfo(MythProgramInfo& programInfo, Myth::Stream *stream);
+
+  /// Get the time that should be reported for this recording
+  static time_t GetRecordingTime(time_t airdate, time_t startDate);
 };

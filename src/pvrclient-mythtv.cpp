@@ -24,7 +24,6 @@
 #include "client.h"
 #include "tools.h"
 #include "avinfo.h"
-#include "guidialogyesno.h"
 
 #include <time.h>
 #include <set>
@@ -44,7 +43,6 @@ PVRClientMythTV::PVRClientMythTV()
 , m_powerSaving(false)
 , m_fileOps(NULL)
 , m_scheduleManager(NULL)
-, m_demux(NULL)
 , m_recordingChangePinCount(0)
 , m_recordingsAmountChange(false)
 , m_recordingsAmount(0)
@@ -55,7 +53,6 @@ PVRClientMythTV::PVRClientMythTV()
 
 PVRClientMythTV::~PVRClientMythTV()
 {
-  SAFE_DELETE(m_demux);
   SAFE_DELETE(m_dummyStream);
   SAFE_DELETE(m_liveStream);
   SAFE_DELETE(m_recordingStream);
@@ -96,11 +93,13 @@ static void Log(int level, char *msg)
   }
 }
 
-void PVRClientMythTV::SetDebug()
+void PVRClientMythTV::SetDebug(bool silent /*= false*/)
 {
   // Setup libcppmyth logging
   if (g_bExtraDebug)
     Myth::DBGAll();
+  else if (silent)
+    Myth::DBGLevel(MYTH_DBG_NONE);
   else
     Myth::DBGLevel(MYTH_DBG_ERROR);
   Myth::SetDBGMsgCallback(Log);
@@ -108,7 +107,7 @@ void PVRClientMythTV::SetDebug()
 
 bool PVRClientMythTV::Connect()
 {
-  SetDebug();
+  SetDebug(true);
   m_control = new Myth::Control(g_szMythHostname, g_iProtoPort, g_iWSApiPort, g_szWSSecurityPin, g_bBlockMythShutdown);
   if (!m_control->IsOpen())
   {
@@ -121,7 +120,7 @@ bool PVRClientMythTV::Connect()
         m_connectionError = CONN_ERROR_SERVER_UNREACHABLE;
     }
     SAFE_DELETE(m_control);
-    XBMC->Log(LOG_ERROR, "Failed to connect to MythTV backend on %s:%d", g_szMythHostname.c_str(), g_iProtoPort);
+    XBMC->Log(LOG_NOTICE, "Failed to connect to MythTV backend on %s:%d", g_szMythHostname.c_str(), g_iProtoPort);
     // Try wake up for the next attempt
     if (!g_szMythHostEther.empty())
       XBMC->WakeOnLan(g_szMythHostEther.c_str());
@@ -131,10 +130,11 @@ bool PVRClientMythTV::Connect()
   {
     m_connectionError = CONN_ERROR_API_UNAVAILABLE;
     SAFE_DELETE(m_control);
-    XBMC->Log(LOG_ERROR,"Failed to connect to MythTV backend on %s:%d with pin %s", g_szMythHostname.c_str(), g_iWSApiPort, g_szWSSecurityPin.c_str());
+    XBMC->Log(LOG_NOTICE,"Failed to connect to MythTV backend on %s:%d with pin %s", g_szMythHostname.c_str(), g_iWSApiPort, g_szWSSecurityPin.c_str());
     return false;
   }
   m_connectionError = CONN_ERROR_NO_ERROR;
+  SetDebug(false);
 
   // Create event handler and subscription as needed
   unsigned subid = 0;
@@ -438,6 +438,8 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
       prog.ResetProps();
       // Keep props
       prog.CopyProps(it->second);
+      // Keep original air date
+      prog.GetPtr()->airdate = it->second.Airdate();
       // Update recording
       it->second = prog;
       ++m_recordingChangePinCount;
@@ -718,6 +720,14 @@ PVR_ERROR PVRClientMythTV::GetChannelGroupMembers(ADDON_HANDLE handle, const PVR
   return PVR_ERROR_NO_ERROR;
 }
 
+bool PVRClientMythTV::IsPlaying() const
+{
+  PLATFORM::CLockObject lock(m_lock);
+  if (m_liveStream || m_dummyStream || m_recordingStream)
+    return true;
+  return false;
+}
+
 int PVRClientMythTV::FillChannelsAndChannelGroups()
 {
   if (!m_control)
@@ -758,7 +768,8 @@ int PVRClientMythTV::FillChannelsAndChannelGroups()
       mapuid_t::iterator itm = channelIdentifiers.find(channelIdentifier);
       if (itm != channelIdentifiers.end())
       {
-        XBMC->Log(LOG_DEBUG, "%s: skipping channel: %d", __FUNCTION__, chanid);
+        if (g_bExtraDebug)
+          XBMC->Log(LOG_DEBUG, "%s: skipping channel: %d", __FUNCTION__, chanid);
         // Link channel to PVR item
         m_PVRChannelUidById.insert(std::make_pair(chanid, itm->second.iUniqueId));
         // Add found PVR item to the grouping set
@@ -797,7 +808,7 @@ int PVRClientMythTV::FindPVRChannelUid(uint32_t channelId) const
   PVRChannelMap::const_iterator it = m_PVRChannelUidById.find(channelId);
   if (it != m_PVRChannelUidById.end())
     return it->second;
-  return -1; // PVR dummy channel UID
+  return -1;
 }
 
 int PVRClientMythTV::GetRecordingsAmount()
@@ -811,7 +822,7 @@ int PVRClientMythTV::GetRecordingsAmount()
     CLockObject lock(m_recordingsLock);
     for (ProgramInfoMap::iterator it = m_recordings.begin(); it != m_recordings.end(); ++it)
     {
-      if (!it->second.IsNull() && it->second.IsVisible())
+      if (!it->second.IsNull() && it->second.IsVisible() && (g_bLiveTVRecordings || !it->second.IsLiveTV()))
         res++;
     }
     m_recordingsAmount = res;
@@ -828,9 +839,6 @@ PVR_ERROR PVRClientMythTV::GetRecordings(ADDON_HANDLE handle)
 
   CLockObject lock(m_recordingsLock);
 
-  // Load recordings list
-  if (m_recordings.empty())
-    FillRecordings();
   // Setup series
   if (g_iGroupRecordings == GROUP_RECORDINGS_ONLY_FOR_SERIES)
   {
@@ -838,7 +846,7 @@ PVR_ERROR PVRClientMythTV::GetRecordings(ADDON_HANDLE handle)
     TitlesMap titles;
     for (ProgramInfoMap::iterator it = m_recordings.begin(); it != m_recordings.end(); ++it)
     {
-      if (!it->second.IsNull() && it->second.IsVisible())
+      if (!it->second.IsNull() && it->second.IsVisible() && (g_bLiveTVRecordings || !it->second.IsLiveTV()))
       {
         std::pair<std::string, std::string> title = std::make_pair(it->second.RecordingGroup(), it->second.Title());
         TitlesMap::iterator found = titles.find(title);
@@ -860,16 +868,16 @@ PVR_ERROR PVRClientMythTV::GetRecordings(ADDON_HANDLE handle)
   // Transfer to PVR
   for (ProgramInfoMap::iterator it = m_recordings.begin(); it != m_recordings.end(); ++it)
   {
-    if (!it->second.IsNull() && it->second.IsVisible())
+    if (!it->second.IsNull() && it->second.IsVisible() && (g_bLiveTVRecordings || !it->second.IsLiveTV()))
     {
       PVR_RECORDING tag;
       memset(&tag, 0, sizeof(PVR_RECORDING));
       tag.bIsDeleted = false;
 
-      tag.recordingTime = it->second.RecordingStartTime();
+      tag.recordingTime = GetRecordingTime(it->second.Airdate(), it->second.RecordingStartTime());
       tag.iDuration = it->second.Duration();
       tag.iPlayCount = it->second.IsWatched() ? 1 : 0;
-      //@TODO: tag.iLastPlayedPosition
+      tag.iLastPlayedPosition = it->second.HasBookmark() ? 1 : 0;
 
       std::string id = it->second.UID();
 
@@ -900,9 +908,12 @@ PVR_ERROR PVRClientMythTV::GetRecordings(ADDON_HANDLE handle)
 
       // Images
       std::string strIconPath;
+      std::string strThumbnailPath;
       std::string strFanartPath;
       if (m_fileOps)
       {
+        strThumbnailPath = m_fileOps->GetPreviewIconPath(it->second);
+
         if (it->second.HasCoverart())
           strIconPath = m_fileOps->GetArtworkPath(it->second, FileOps::FileTypeCoverart);
         else if (it->second.IsLiveTV())
@@ -912,13 +923,13 @@ PVR_ERROR PVRClientMythTV::GetRecordings(ADDON_HANDLE handle)
             strIconPath = m_fileOps->GetChannelIconPath(channel);
         }
         else
-          strIconPath = m_fileOps->GetPreviewIconPath(it->second);
+          strIconPath = strThumbnailPath;
 
         if (it->second.HasFanart())
           strFanartPath = m_fileOps->GetArtworkPath(it->second, FileOps::FileTypeFanart);
       }
       PVR_STRCPY(tag.strIconPath, strIconPath.c_str());
-      PVR_STRCPY(tag.strThumbnailPath, strIconPath.c_str());
+      PVR_STRCPY(tag.strThumbnailPath, strThumbnailPath.c_str());
       PVR_STRCPY(tag.strFanartPath, strFanartPath.c_str());
 
       // EPG Entry (Enables "Play recording" option and icon)
@@ -952,7 +963,7 @@ int PVRClientMythTV::GetDeletedRecordingsAmount()
     CLockObject lock(m_recordingsLock);
     for (ProgramInfoMap::iterator it = m_recordings.begin(); it != m_recordings.end(); ++it)
     {
-      if (!it->second.IsNull() && it->second.IsDeleted())
+      if (!it->second.IsNull() && it->second.IsDeleted() && (g_bLiveTVRecordings || !it->second.IsLiveTV()))
         res++;
     }
     m_deletedRecAmount = res;
@@ -969,22 +980,19 @@ PVR_ERROR PVRClientMythTV::GetDeletedRecordings(ADDON_HANDLE handle)
 
   CLockObject lock(m_recordingsLock);
 
-  // Load recordings list
-  if (m_recordings.empty())
-    FillRecordings();
   // Transfer to PVR
   for (ProgramInfoMap::iterator it = m_recordings.begin(); it != m_recordings.end(); ++it)
   {
-    if (!it->second.IsNull() && it->second.IsDeleted())
+    if (!it->second.IsNull() && it->second.IsDeleted() && (g_bLiveTVRecordings || !it->second.IsLiveTV()))
     {
       PVR_RECORDING tag;
       memset(&tag, 0, sizeof(PVR_RECORDING));
       tag.bIsDeleted = true;
 
-      tag.recordingTime = it->second.RecordingStartTime();
+      tag.recordingTime = GetRecordingTime(it->second.Airdate(), it->second.RecordingStartTime());
       tag.iDuration = it->second.Duration();
       tag.iPlayCount = it->second.IsWatched() ? 1 : 0;
-      //@TODO: tag.iLastPlayedPosition
+      tag.iLastPlayedPosition = it->second.HasBookmark() ? 1 : 0;
 
       std::string id = it->second.UID();
 
@@ -1012,9 +1020,12 @@ PVR_ERROR PVRClientMythTV::GetDeletedRecordings(ADDON_HANDLE handle)
 
       // Images
       std::string strIconPath;
+      std::string strThumbnailPath;
       std::string strFanartPath;
       if (m_fileOps)
       {
+        strThumbnailPath = m_fileOps->GetPreviewIconPath(it->second);
+
         if (it->second.HasCoverart())
           strIconPath = m_fileOps->GetArtworkPath(it->second, FileOps::FileTypeCoverart);
         else if (it->second.IsLiveTV())
@@ -1024,13 +1035,13 @@ PVR_ERROR PVRClientMythTV::GetDeletedRecordings(ADDON_HANDLE handle)
             strIconPath = m_fileOps->GetChannelIconPath(channel);
         }
         else
-          strIconPath = m_fileOps->GetPreviewIconPath(it->second);
+          strIconPath = strThumbnailPath;
 
         if (it->second.HasFanart())
           strFanartPath = m_fileOps->GetArtworkPath(it->second, FileOps::FileTypeFanart);
       }
       PVR_STRCPY(tag.strIconPath, strIconPath.c_str());
-      PVR_STRCPY(tag.strThumbnailPath, strIconPath.c_str());
+      PVR_STRCPY(tag.strThumbnailPath, strThumbnailPath.c_str());
       PVR_STRCPY(tag.strFanartPath, strFanartPath.c_str());
 
       // Unimplemented
@@ -1061,7 +1072,6 @@ void PVRClientMythTV::ForceUpdateRecording(ProgramInfoMap::iterator it)
     MythProgramInfo prog(m_control->GetRecorded(it->second.ChannelID(), it->second.RecordingStartTime()));
     if (!prog.IsNull())
     {
-      CLockObject lock(m_recordingsLock);
       // Copy props
       prog.CopyProps(it->second);
       // Update recording
@@ -1197,133 +1207,97 @@ PVR_ERROR PVRClientMythTV::SetRecordingPlayCount(const PVR_RECORDING &recording,
       if (g_bExtraDebug)
         XBMC->Log(LOG_DEBUG, "%s: Set watched state for %s", __FUNCTION__, recording.strRecordingId);
       ForceUpdateRecording(it);
-      return PVR_ERROR_NO_ERROR;
     }
     else
     {
       XBMC->Log(LOG_DEBUG, "%s: Failed setting watched state for: %s", __FUNCTION__, recording.strRecordingId);
-      return PVR_ERROR_NO_ERROR;
     }
+
+    //@FIXME: Open dialog while playing cause dead lock
+    if (g_bPromptDeleteAtEnd && count > 0 && !IsPlaying())
+    {
+      std::string dispTitle = MakeProgramTitle(it->second.Title(), it->second.Subtitle());
+      if (GUI->Dialog_YesNo_ShowAndGetInput(XBMC->GetLocalizedString(122),
+              XBMC->GetLocalizedString(19112), "", dispTitle.c_str(),
+              "", XBMC->GetLocalizedString(117)))
+      {
+        if (m_control->DeleteRecording(*(it->second.GetPtr())))
+          XBMC->Log(LOG_DEBUG, "%s: Deleted recording %s", __FUNCTION__, it->first.c_str());
+        else
+          XBMC->Log(LOG_ERROR, "%s: Failed to delete recording %s", __FUNCTION__, it->first.c_str());
+      }
+    }
+
+    return PVR_ERROR_NO_ERROR;
   }
   else
   {
     XBMC->Log(LOG_DEBUG, "%s: Recording %s does not exist", __FUNCTION__, recording.strRecordingId);
+    return PVR_ERROR_FAILED;
   }
-  return PVR_ERROR_FAILED;
 }
 
-/*
- *  @TODO: Implement using proto or wsapi
- *
 PVR_ERROR PVRClientMythTV::SetRecordingLastPlayedPosition(const PVR_RECORDING &recording, int lastplayedposition)
 {
-  // MythTV provides it's bookmarks as frame offsets whereas XBMC expects a time offset.
-  // The frame offset is calculated by: frameOffset = bookmark * frameRate.
-
   if (g_bExtraDebug)
-  {
     XBMC->Log(LOG_DEBUG, "%s: Setting Bookmark for: %s to %d", __FUNCTION__, recording.strTitle, lastplayedposition);
-  }
 
   CLockObject lock(m_recordingsLock);
   ProgramInfoMap::iterator it = m_recordings.find(recording.strRecordingId);
   if (it != m_recordings.end())
   {
-    // pin framerate value
-    //if (it->second.FrameRate() < 0)
-    //  it->second.SetFrameRate(m_db.GetRecordingFrameRate(it->second));
-    // Calculate the frame offset
-    long long frameOffset = (long long)(lastplayedposition * it->second.FrameRate() / 1000.0f);
-    if (frameOffset < 0) frameOffset = 0;
-    if (g_bExtraDebug)
+    Myth::ProgramPtr prog(it->second.GetPtr());
+    lock.Unlock();
+    if (prog)
     {
-      XBMC->Log(LOG_DEBUG, "%s: FrameOffset: %lld)", __FUNCTION__, frameOffset);
-    }
-
-    // Write the bookmark
-    if (m_con.SetBookmark(it->second, frameOffset))
-    {
-      if (g_bExtraDebug)
-        XBMC->Log(LOG_DEBUG, "%s: Setting Bookmark successful", __FUNCTION__);
-      return PVR_ERROR_NO_ERROR;
-    }
-    else
-    {
-      if (g_bExtraDebug)
+      long long duration = (long long)lastplayedposition * 1000;
+      // Write the bookmark
+      if (m_control->SetSavedBookmark(*prog, 2, duration))
       {
-        XBMC->Log(LOG_ERROR, "%s: Setting Bookmark failed", __FUNCTION__);
-      }
-    }
-  }
-  else
-  {
-    XBMC->Log(LOG_DEBUG, "%s: Recording %s does not exist", __FUNCTION__, recording.strRecordingId);
-  }
-  return PVR_ERROR_FAILED;
-}
-
-int PVRClientMythTV::GetRecordingLastPlayedPosition(MythProgramInfo &programInfo)
-{
-  // MythTV provides it's bookmarks as frame offsets whereas XBMC expects a time offset.
-  // The bookmark in seconds is calculated by: bookmark = frameOffset / frameRate.
-  int bookmark = 0;
-
-  if (programInfo.HasBookmark())
-  {
-    long long frameOffset = m_con.GetBookmark(programInfo); // returns 0 if no bookmark was found
-    if (frameOffset > 0)
-    {
-      if (g_bExtraDebug)
-      {
-        XBMC->Log(LOG_DEBUG, "%s: FrameOffset: %lld)", __FUNCTION__, frameOffset);
-      }
-      // Pin framerate value
-      //if (programInfo.FrameRate() < 0)
-      //  programInfo.SetFrameRate(m_db.GetRecordingFrameRate(programInfo));
-      float frameRate = (float)programInfo.FrameRate() / 1000.0f;
-      if (frameRate > 0)
-      {
-        bookmark = (int)((float)frameOffset / frameRate);
         if (g_bExtraDebug)
-        {
-          XBMC->Log(LOG_DEBUG, "%s: Bookmark: %d)", __FUNCTION__, bookmark);
-        }
+          XBMC->Log(LOG_DEBUG, "%s: Setting Bookmark successful", __FUNCTION__);
+        return PVR_ERROR_NO_ERROR;
       }
     }
+    XBMC->Log(LOG_NOTICE, "%s: Setting Bookmark failed", __FUNCTION__);
+    return PVR_ERROR_NO_ERROR;
   }
-  else
-  {
-    if (g_bExtraDebug)
-    {
-      XBMC->Log(LOG_DEBUG, "%s: Recording %s has no bookmark", __FUNCTION__, programInfo.Title().c_str());
-    }
-  }
-
-  if (bookmark < 0) bookmark = 0;
-  return bookmark;
+  XBMC->Log(LOG_ERROR, "%s: Recording %s does not exist", __FUNCTION__, recording.strRecordingId);
+  return PVR_ERROR_FAILED;
 }
 
 int PVRClientMythTV::GetRecordingLastPlayedPosition(const PVR_RECORDING &recording)
 {
-  // MythTV provides it's bookmarks as frame offsets whereas XBMC expects a time offset.
-  // The bookmark in seconds is calculated by: bookmark = frameOffset / frameRate.
-  int bookmark = 0;
-
   if (g_bExtraDebug)
-  {
     XBMC->Log(LOG_DEBUG, "%s: Reading Bookmark for: %s", __FUNCTION__, recording.strTitle);
-  }
 
   CLockObject lock(m_recordingsLock);
   ProgramInfoMap::iterator it = m_recordings.find(recording.strRecordingId);
   if (it != m_recordings.end())
-    bookmark = GetRecordingLastPlayedPosition(it->second);
+  {
+    if (it->second.HasBookmark())
+    {
+      Myth::ProgramPtr prog(it->second.GetPtr());
+      lock.Unlock();
+      if (prog)
+      {
+        long long duration = m_control->GetSavedBookmark(*prog, 2); // returns 0 if no bookmark was found
+        if (duration > 0)
+        {
+          int bookmark = (int)(duration / 1000);
+          if (g_bExtraDebug)
+            XBMC->Log(LOG_DEBUG, "%s: Bookmark: %d", __FUNCTION__, bookmark);
+          return bookmark;
+        }
+      }
+    }
+    if (g_bExtraDebug)
+      XBMC->Log(LOG_DEBUG, "%s: Recording %s has no bookmark", __FUNCTION__, recording.strTitle);
+  }
   else
     XBMC->Log(LOG_ERROR, "%s: Recording %s does not exist", __FUNCTION__, recording.strRecordingId);
-
-  return bookmark;
+  return 0;
 }
-*/
 
 PVR_ERROR PVRClientMythTV::GetRecordingEdl(const PVR_RECORDING &recording, PVR_EDL_ENTRY entries[], int *size)
 {
@@ -1369,9 +1343,8 @@ PVR_ERROR PVRClientMythTV::GetRecordingEdl(const PVR_RECORDING &recording, PVR_E
   // Open dialog
   if (g_iEnableEDL == ENABLE_EDL_DIALOG && !skpList->empty())
   {
-    GUIDialogYesNo dialog(XBMC->GetLocalizedString(30110), XBMC->GetLocalizedString(30111), 1);
-    dialog.Open();
-    if (dialog.IsNo())
+    bool canceled = false;
+    if (!GUI->Dialog_YesNo_ShowAndGetInput(XBMC->GetLocalizedString(30110), XBMC->GetLocalizedString(30111), canceled) && !canceled)
       return PVR_ERROR_NO_ERROR;
   }
 
@@ -1542,6 +1515,10 @@ PVR_ERROR PVRClientMythTV::GetTimers(ADDON_HANDLE handle)
     tag.startTime = (*it)->startTime;
     tag.endTime = (*it)->endTime;
 
+    // Discard upcoming without valid channel uid
+    if (tag.iClientChannelUid == -1 && !(*it)->isRule)
+      continue;
+
     // Status: Match recording status with PVR_TIMER status
     switch ((*it)->recordingStatus)
     {
@@ -1660,16 +1637,23 @@ PVR_ERROR PVRClientMythTV::AddTimer(const PVR_TIMER &timer)
   XBMC->Log(LOG_DEBUG, "%s: title: %s, start: %ld, end: %ld, chanID: %u", __FUNCTION__, timer.strTitle, timer.startTime, timer.endTime, timer.iClientChannelUid);
   CLockObject lock(m_lock);
   // Check if our timer is a quick recording of live tv
-  // Assumptions: Timer start time = 0, and our live recorder is locked on the same channel.
+  // Assumptions: Our live recorder is locked on the same channel and the recording starts
+  // at the same time as or before (includes 0) the currently in progress program
   // If true then keep recording, setup recorder and let the backend handle the rule.
-  if (timer.startTime == 0 && m_liveStream && m_liveStream->IsPlaying())
+  if (m_liveStream && m_liveStream->IsPlaying())
   {
     Myth::ProgramPtr program = m_liveStream->GetPlayedProgram();
-    if (timer.iClientChannelUid == FindPVRChannelUid(program->channel.chanId))
+    if (timer.iClientChannelUid == FindPVRChannelUid(program->channel.chanId) &&
+        timer.startTime <= program->startTime)
     {
       XBMC->Log(LOG_DEBUG, "%s: Timer is a quick recording. Toggling Record on", __FUNCTION__);
       if (m_liveStream->IsLiveRecording())
         XBMC->Log(LOG_NOTICE, "%s: Record already on! Retrying...", __FUNCTION__);
+      else
+      {
+        // Add bookmark for the current stream position
+        m_control->SetSavedBookmark(*program, 1, m_liveStream->GetPosition());
+      }
       if (m_liveStream->KeepLiveRecording(true))
         return PVR_ERROR_NO_ERROR;
       else
@@ -1962,6 +1946,7 @@ PVR_ERROR PVRClientMythTV::GetTimerTypes(PVR_TIMER_TYPE types[], int *size)
   }
   else
   {
+    memset(&types[index], 0, sizeof(PVR_TIMER_TYPE));
     types[index].iId = 1;
     types[index].iAttributes = PVR_TIMER_TYPE_IS_MANUAL;
     ++index;
@@ -2006,8 +1991,6 @@ bool PVRClientMythTV::OpenLiveStream(const PVR_CHANNEL &channel)
   // Try to open
   if (m_liveStream->SpawnLiveTV(chanset[0]->chanNum, chanset))
   {
-    if(g_bDemuxing)
-      m_demux = new Demux(m_liveStream);
     XBMC->Log(LOG_DEBUG, "%s: Done", __FUNCTION__);
     return true;
   }
@@ -2022,8 +2005,6 @@ bool PVRClientMythTV::OpenLiveStream(const PVR_CHANNEL &channel)
     m_dummyStream = new FileStreaming(g_szClientPath + PATH_SEPARATOR_STRING + "resources" + PATH_SEPARATOR_STRING + "channel_unavailable.ts");
   if (m_dummyStream && m_dummyStream->IsValid())
   {
-    if(g_bDemuxing)
-      m_demux = new Demux(m_dummyStream);
     return true;
   }
   SAFE_DELETE(m_dummyStream);
@@ -2038,8 +2019,6 @@ void PVRClientMythTV::CloseLiveStream()
 
   // Begin critical section
   CLockObject lock(m_lock);
-  // Destroy my demuxer
-  SAFE_DELETE(m_demux);
   // Destroy my stream
   SAFE_DELETE(m_liveStream);
   SAFE_DELETE(m_dummyStream);
@@ -2064,7 +2043,7 @@ int PVRClientMythTV::ReadLiveStream(unsigned char *pBuffer, unsigned int iBuffer
 int PVRClientMythTV::GetCurrentClientChannel()
 {
   if (g_bExtraDebug)
-    XBMC->Log(LOG_DEBUG, "%s", __FUNCTION__);
+   XBMC->Log(LOG_DEBUG, "%s", __FUNCTION__);
 
   // Begin critical section
   CLockObject lock(m_lock);
@@ -2083,8 +2062,6 @@ bool PVRClientMythTV::SwitchChannel(const PVR_CHANNEL &channel)
 
   // Begin critical section
   CLockObject lock(m_lock);
-  // Destroy my demuxer for reopening
-  SAFE_DELETE(m_demux);
   // Stop the live for reopening
   if (m_liveStream)
     m_liveStream->StopLiveTV();
@@ -2168,9 +2145,6 @@ PVR_ERROR PVRClientMythTV::SignalStatus(PVR_SIGNAL_STATUS &signalStatus)
       PVR_STRCPY(signalStatus.strAdapterStatus, "Locked");
     else
       PVR_STRCPY(signalStatus.strAdapterStatus, "No lock");
-    signalStatus.dAudioBitrate = 0;
-    signalStatus.dDolbyBitrate = 0;
-    signalStatus.dVideoBitrate = 0;
     signalStatus.iSignal = signal->signal;
     signalStatus.iBER = signal->ber;
     signalStatus.iSNR = signal->snr;
@@ -2183,45 +2157,9 @@ PVR_ERROR PVRClientMythTV::SignalStatus(PVR_SIGNAL_STATUS &signalStatus)
   return PVR_ERROR_NO_ERROR;
 }
 
-PVR_ERROR PVRClientMythTV::GetStreamProperties(PVR_STREAM_PROPERTIES* pProperties)
-{
-  return m_demux && m_demux->GetStreamProperties(pProperties) ? PVR_ERROR_NO_ERROR : PVR_ERROR_SERVER_ERROR;
-}
-
-void PVRClientMythTV::DemuxAbort(void)
-{
-  if (m_demux)
-    m_demux->Abort();
-}
-
-void PVRClientMythTV::DemuxFlush(void)
-{
-  if (m_demux)
-    m_demux->Flush();
-}
-
-DemuxPacket* PVRClientMythTV::DemuxRead(void)
-{
-  return m_demux ? m_demux->Read() : NULL;
-}
-
-bool PVRClientMythTV::SeekTime(int time, bool backwards, double* startpts)
-{
-  return m_demux ? m_demux->SeekTime(time, backwards, startpts) : false;
-}
-
 time_t PVRClientMythTV::GetPlayingTime()
 {
-  CLockObject lock(m_lock);
-  if (!m_liveStream || !m_demux)
-    return 0;
-  int sec = m_demux->GetPlayingTime() / 1000;
-  time_t st = GetBufferTimeStart();
-  struct tm playtm;
-  localtime_r(&st, &playtm);
-  playtm.tm_sec += sec;
-  time_t pt = mktime(&playtm);
-  return pt;
+  return (time_t)0;
 }
 
 time_t PVRClientMythTV::GetBufferTimeStart()
@@ -2423,7 +2361,7 @@ PVR_ERROR PVRClientMythTV::CallMenuHook(const PVR_MENUHOOK &menuhook, const PVR_
     return DeleteAndForgetRecording(item.data.recording);
   }
 
-  if (menuhook.iHookId == MENUHOOK_KEEP_LIVETV_RECORDING && item.cat == PVR_MENUHOOK_RECORDING)
+  if (menuhook.iHookId == MENUHOOK_KEEP_RECORDING && item.cat == PVR_MENUHOOK_RECORDING)
   {
     CLockObject lock(m_recordingsLock);
     ProgramInfoMap::iterator it = m_recordings.find(item.data.recording.strRecordingId);
@@ -2433,9 +2371,6 @@ PVR_ERROR PVRClientMythTV::CallMenuHook(const PVR_MENUHOOK &menuhook, const PVR_
       return PVR_ERROR_INVALID_PARAMETERS;
     }
 
-    if (!it->second.IsLiveTV())
-      return PVR_ERROR_NO_ERROR;
-
     // If recording is current live show then keep it and set live recorder
     if (IsMyLiveRecording(it->second))
     {
@@ -2444,7 +2379,7 @@ PVR_ERROR PVRClientMythTV::CallMenuHook(const PVR_MENUHOOK &menuhook, const PVR_
         return PVR_ERROR_NO_ERROR;
       return PVR_ERROR_FAILED;
     }
-    // Else keep old live recording
+    // Else keep recording
     else
     {
       if (m_control->UndeleteRecording(*(it->second.GetPtr())))
@@ -2619,4 +2554,25 @@ void PVRClientMythTV::FillRecordingAVInfo(MythProgramInfo& programInfo, Myth::St
     // Set video aspec
     programInfo.SetPropsVideoAspec(mInfo.stream_info.aspect);
   }
+}
+
+time_t PVRClientMythTV::GetRecordingTime(time_t airtt, time_t recordingtt)
+{
+  if (!g_bUseAirdate || airtt == 0)
+    return recordingtt;
+
+  /* Airdate is usually a Date, not a time.  So we include the time part from
+  the recording time in order to give the reported time something other than
+  12AM.  If two shows are recorded on the same day, typically they are aired
+  in the correct time order.  Combining airdate and recording time gives us
+  the best possible time to report to the user to allow them to sort by
+  datetime to see the correct episode ordering. */
+  struct tm airtm, rectm;
+  localtime_r(&airtt, &airtm);
+  localtime_r(&recordingtt, &rectm);
+  airtm.tm_hour = rectm.tm_hour;
+  airtm.tm_min = rectm.tm_min;
+  airtm.tm_sec = rectm.tm_sec;
+
+  return mktime(&airtm);
 }

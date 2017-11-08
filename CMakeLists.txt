@@ -22,35 +22,10 @@ if(NOT WIN32)
   add_options(ALL_LANGUAGES ALL_BUILDS "-fPIC -Wall")
 endif()
 
-set(MYTHTV_SOURCES src/avinfo.cpp
-                   src/categories.cpp
-                   src/demuxer/ES_AAC.cpp
-                   src/demuxer/ES_MPEGAudio.cpp
-                   src/demuxer/bitstream.cpp
-                   src/demuxer/ES_Teletext.cpp
-                   src/demuxer/debug.cpp
-                   src/demuxer/ES_Subtitle.cpp
-                   src/demuxer/ES_h264.cpp
-                   src/demuxer/ES_AC3.cpp
-                   src/demuxer/elementaryStream.cpp
-                   src/demuxer/ES_MPEGVideo.cpp
-                   src/demuxer/tsDemuxer.cpp
-                   src/demux.cpp
-                   src/guidialogbase.cpp
-                   src/guidialogyesno.cpp
-                   src/pvrclient-mythtv.cpp
-                   src/cppmyth/MythScheduleManager.cpp
-                   src/cppmyth/MythScheduleHelperNoHelper.cpp
-                   src/cppmyth/MythScheduleHelper75.cpp
-                   src/cppmyth/MythScheduleHelper76.cpp
-                   src/cppmyth/MythScheduleHelper85.cpp
-                   src/cppmyth/MythEPGInfo.cpp
-                   src/cppmyth/MythRecordingRule.cpp
-                   src/cppmyth/MythProgramInfo.cpp
-                   src/cppmyth/MythChannel.cpp
-                   src/client.cpp
-                   src/fileOps.cpp
-                   src/filestreaming.cpp)
+file (GLOB MYTHTV_SOURCES
+  src/demuxer/*.cpp src/demuxer/*.h
+  src/cppmyth/*.cpp src/cppmyth/*.h
+  src/*.cpp src/*.h)
 
 add_subdirectory(lib/cppmyth)
 
@@ -59,6 +34,15 @@ if(WIN32)
   list(APPEND DEPLIBS ws2_32)
 else()
   list(APPEND DEPLIBS m)
+endif()
+
+if(NOT WIN32 AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX))
+  if(HAS_BUILTIN_SYNC_ADD_AND_FETCH)
+    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
+  endif()
+  if(HAS_BUILTIN_SYNC_SUB_AND_FETCH)
+    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
+  endif()
 endif()
 
 set(BUILD_SHARED_LIBS ON)

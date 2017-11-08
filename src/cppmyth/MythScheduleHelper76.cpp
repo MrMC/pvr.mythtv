@@ -54,8 +54,12 @@ bool MythScheduleHelper76::FillTimerEntryWithRule(MythTimerEntry& entry, const M
   // Assign timer type regarding rule attributes. The match SHOULD be opposite to
   // that which is applied in function 'NewFromTimer'
 
+  // Check rule flag for this entry
+  entry.isRule = true;
+
   MythRecordingRule rule = node.GetRule();
-  XBMC->Log(LOG_DEBUG, "76::%s: RecordID %u", __FUNCTION__, rule.RecordID());
+  if (g_bExtraDebug)
+    XBMC->Log(LOG_DEBUG, "76::%s: RecordID %u", __FUNCTION__, rule.RecordID());
 
   switch (rule.Type())
   {
@@ -599,6 +603,10 @@ MythRecordingRule MythScheduleHelper76::NewFromTimer(const MythTimerEntry& entry
       rule.SetInactive(entry.isInactive);
       return rule;
     case TIMER_TYPE_UPCOMING:
+    case TIMER_TYPE_RULE_INACTIVE:
+    case TIMER_TYPE_UPCOMING_ALTERNATE:
+    case TIMER_TYPE_UPCOMING_RECORDED:
+    case TIMER_TYPE_UPCOMING_EXPIRED:
     case TIMER_TYPE_UPCOMING_MANUAL:
     case TIMER_TYPE_ZOMBIE:
       rule.SetType(Myth::RT_SingleRecord);

@@ -132,6 +132,10 @@ msgctxt "#30034"
 msgid "Allow recordings to expire"
 msgstr "Engedélyezed a felvételek lejártát"
 
+msgctxt "#30047"
+msgid "Prompt to delete the watched recording"
+msgstr "Kérdezzen a megtekintett felvétel törlése előtt"
+
 msgctxt "#30049"
 msgid "Recording template"
 msgstr "Felvétel minta"
@@ -273,12 +277,8 @@ msgid "Delete and re-record"
 msgstr "Törlés és újra-felvétel"
 
 msgctxt "#30412"
-msgid "Keep LiveTV recording"
-msgstr "LiveTV felvétel folyamatosan"
-
-msgctxt "#30421"
-msgid "Show/hide inactive upcomings"
-msgstr "Inaktív hamarosan érkezők mutatása/elrejtése"
+msgid "Keep recording"
+msgstr "Felvétel megtartása"
 
 msgctxt "#30422"
 msgid "Refresh cache for channel icons"

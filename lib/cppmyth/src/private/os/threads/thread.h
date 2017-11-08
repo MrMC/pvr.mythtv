@@ -2,18 +2,18 @@
 /*
  *      Copyright (C) 2015 Jean-Luc Barriere
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
+ *  This library is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU Lesser General Public License as published
+ *  by the Free Software Foundation; either version 3, or (at your option)
  *  any later version.
  *
- *  This Program is distributed in the hope that it will be useful,
+ *  This library is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
+ *  GNU Lesser General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; see the file COPYING.  If not, write to
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with this library; see the file COPYING.  If not, write to
  *  the Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301 USA
  *  http://www.gnu.org/copyleft/gpl.html
@@ -43,15 +43,18 @@ namespace OS
 
     CThread(const CThread& _thread)
     {
-      (void)_thread;
       this->m_handle = new Handle();
+      this->m_finalizeOnStop = _thread.m_finalizeOnStop;
     }
 
     CThread& operator=(const CThread& _thread)
     {
-      (void)_thread;
-      delete this->m_handle;
-      this->m_handle = new Handle();
+      if (this != &_thread)
+      {
+        delete this->m_handle;
+        this->m_handle = new Handle();
+        this->m_finalizeOnStop = _thread.m_finalizeOnStop;
+      }
       return *this;
     }
 
@@ -65,12 +68,11 @@ namespace OS
       CLockGuard lock(m_handle->mutex);
       if (!m_handle->running)
       {
-        m_handle->started = false;
         m_handle->notifiedStop = false;
         if (thread_create(&(m_handle->nativeHandle), CThread::ThreadHandler, ((void*)static_cast<CThread*>(this))))
         {
           if (wait)
-            m_handle->condition.Wait(m_handle->mutex, m_handle->started);
+            m_handle->condition.Wait(m_handle->mutex, m_handle->running);
           return true;
         }
       }
@@ -108,14 +110,22 @@ namespace OS
     bool IsStopped()
     {
       CLockGuard lock(m_handle->mutex);
-      return m_handle->notifiedStop;
+      return m_handle->notifiedStop || m_handle->stopped;
     }
 
     void Sleep(unsigned timeout)
     {
+      CTimeout _timeout(timeout);
       CLockGuard lock(m_handle->mutex);
-      if (!m_handle->notifiedStop)
-        m_handle->condition.Wait(m_handle->mutex, m_handle->notifiedStop, timeout);
+      while (!m_handle->notifiedStop && !m_handle->notifiedWake && m_handle->condition.Wait(m_handle->mutex, _timeout));
+      m_handle->notifiedWake = false; // Reset the wake flag
+    }
+
+    void WakeUp()
+    {
+      CLockGuard lock(m_handle->mutex);
+      m_handle->notifiedWake = true;
+      m_handle->condition.Broadcast();
     }
 
   protected:
@@ -130,16 +140,16 @@ namespace OS
       volatile bool running;
       volatile bool stopped;
       volatile bool notifiedStop;
-      volatile bool started;
+      volatile bool notifiedWake;
       CCondition<volatile bool> condition;
       CMutex        mutex;
 
       Handle()
       : nativeHandle(0)
       , running(false)
-      , stopped(false)
+      , stopped(true)
       , notifiedStop(false)
-      , started(false)
+      , notifiedWake(false)
       , condition()
       , mutex() { }
     };
@@ -156,7 +166,6 @@ namespace OS
         bool finalize = thread->m_finalizeOnStop;
         {
           CLockGuard lock(thread->m_handle->mutex);
-          thread->m_handle->started = true;
           thread->m_handle->running = true;
           thread->m_handle->stopped = false;
           thread->m_handle->condition.Broadcast();

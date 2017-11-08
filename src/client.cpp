@@ -22,7 +22,7 @@
 
 #include "client.h"
 #include "pvrclient-mythtv.h"
-#include "guidialogyesno.h"
+#include "pvrclient-launcher.h"
 
 #include <mrmc/xbmc_pvr_dll.h>
 
@@ -32,7 +32,7 @@ using namespace ADDON;
  * Default values are defined inside client.h
  * and exported to the other source files.
  */
-bool          g_bNotifyAddonFailure     = true;                             ///< Notify user after failure of create function
+bool          g_bNotifyAddonFailure     = false;                            ///< Notify user after failure of addon connection
 std::string   g_szMythHostname          = DEFAULT_HOST;                     ///< The Host name or IP of the mythtv server
 std::string   g_szMythHostEther         = "";                               ///< The Host MAC address of the mythtv server
 int           g_iProtoPort              = DEFAULT_PROTO_PORT;               ///< The mythtv protocol port (default is 6543)
@@ -44,6 +44,7 @@ bool          g_bLiveTVPriority         = DEFAULT_LIVETV_PRIORITY;          ///<
 int           g_iLiveTVConflictStrategy = DEFAULT_LIVETV_CONFLICT_STRATEGY; ///< Conflict resolving strategy (0=
 bool          g_bChannelIcons           = DEFAULT_CHANNEL_ICONS;            ///< Load Channel Icons
 bool          g_bRecordingIcons         = DEFAULT_RECORDING_ICONS;          ///< Load Recording Icons (Fanart/Thumbnails)
+bool          g_bLiveTVRecordings       = DEFAULT_LIVETV_RECORDINGS;        ///< Show LiveTV recordings
 int           g_iRecTemplateType        = DEFAULT_RECORD_TEMPLATE;          ///< Template type for new record (0=Internal, 1=MythTV)
 bool          g_bRecAutoMetadata        = true;
 bool          g_bRecAutoCommFlag        = false;
@@ -54,12 +55,15 @@ bool          g_bRecAutoRunJob3         = false;
 bool          g_bRecAutoRunJob4         = false;
 bool          g_bRecAutoExpire          = false;
 int           g_iRecTranscoder          = 0;
-bool          g_bDemuxing               = DEFAULT_HANDLE_DEMUXING;
 int           g_iTuneDelay              = DEFAULT_TUNE_DELAY;
 int           g_iGroupRecordings        = GROUP_RECORDINGS_ALWAYS;
+bool          g_bUseAirdate             = DEFAULT_USE_AIRDATE;
 int           g_iEnableEDL              = ENABLE_EDL_ALWAYS;
 bool          g_bBlockMythShutdown      = DEFAULT_BLOCK_SHUTDOWN;
 bool          g_bLimitTuneAttempts      = DEFAULT_LIMIT_TUNE_ATTEMPTS;
+bool          g_bShowNotRecording       = DEFAULT_SHOW_NOT_RECORDING;
+bool          g_bPromptDeleteAtEnd      = DEFAULT_PROMPT_DELETE;
+bool          g_bUseBackendBookmarks    = DEFAULT_BACKEND_BOOKMARKS;
 
 ///* Client member variables */
 ADDON_STATUS  m_CurStatus               = ADDON_STATUS_UNKNOWN;
@@ -69,6 +73,7 @@ std::string   g_szUserPath              = "";
 std::string   g_szClientPath            = "";
 
 PVRClientMythTV         *g_client       = NULL;
+PVRClientLauncher       *g_launcher     = NULL;
 
 CHelper_libXBMC_addon   *XBMC           = NULL;
 CHelper_libXBMC_pvr     *PVR            = NULL;
@@ -85,6 +90,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
 {
   if (!hdl)
     return ADDON_STATUS_PERMANENT_FAILURE;
+  SAFE_DELETE(g_launcher);
 
   // Register handles
   XBMC = new CHelper_libXBMC_addon;
@@ -94,8 +100,8 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
     SAFE_DELETE(XBMC);
     return ADDON_STATUS_PERMANENT_FAILURE;
   }
-  XBMC->Log(LOG_DEBUG, "Creating MythTV PVR-Client");
-  XBMC->Log(LOG_DEBUG, "Addon compiled with XBMC_PVR_API_VERSION: %s and XBMC_PVR_MIN_API_VERSION: %s", GetPVRAPIVersion(), GetMininumPVRAPIVersion());
+  XBMC->Log(LOG_NOTICE, "Creating MythTV PVR-Client");
+  XBMC->Log(LOG_NOTICE, "Addon compiled with PVR API version %s", GetPVRAPIVersion());
   XBMC->Log(LOG_DEBUG, "Register handle @ libXBMC_addon...done");
   XBMC->Log(LOG_DEBUG, "Checking props...");
   if (!props)
@@ -191,7 +197,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("extradebug", &g_bExtraDebug))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'extradebug' setting, falling back to '%b' as default", DEFAULT_EXTRA_DEBUG);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'extradebug' setting, falling back to '%u' as default", DEFAULT_EXTRA_DEBUG);
     g_bExtraDebug = DEFAULT_EXTRA_DEBUG;
   }
 
@@ -199,7 +205,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("livetv", &g_bLiveTV))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'livetv' setting, falling back to '%b' as default", DEFAULT_LIVETV);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'livetv' setting, falling back to '%u' as default", DEFAULT_LIVETV);
     g_bLiveTV = DEFAULT_LIVETV;
   }
 
@@ -238,14 +244,6 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("rec_transcoder", &g_iRecTranscoder))
     g_iRecTranscoder = 0;
 
-  /* Read setting "demuxing" from settings.xml */
-  if (!XBMC->GetSetting("demuxing", &g_bDemuxing))
-  {
-    /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'demuxing' setting, falling back to '%b' as default", DEFAULT_HANDLE_DEMUXING);
-    g_bDemuxing = DEFAULT_HANDLE_DEMUXING;
-  }
-
   /* Read setting "tunedelay" from settings.xml */
   if (!XBMC->GetSetting("tunedelay", &g_iTuneDelay))
   {
@@ -272,6 +270,14 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
     g_iGroupRecordings = GROUP_RECORDINGS_ALWAYS;
   }
 
+  /* Read setting "use_airdate" from settings.xml */
+  if (!XBMC->GetSetting("use_airdate", &g_bUseAirdate))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'use_airdate' setting, falling back to '%u' as default", DEFAULT_USE_AIRDATE);
+    g_bUseAirdate = DEFAULT_USE_AIRDATE;
+  }
+
   /* Read setting "enable_edl" from settings.xml */
   if (!XBMC->GetSetting("enable_edl", &g_iEnableEDL))
   {
@@ -284,7 +290,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("block_shutdown", &g_bBlockMythShutdown))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'block_shutdown' setting, falling back to '%b' as default", DEFAULT_BLOCK_SHUTDOWN);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'block_shutdown' setting, falling back to '%u' as default", DEFAULT_BLOCK_SHUTDOWN);
     g_bBlockMythShutdown = DEFAULT_BLOCK_SHUTDOWN;
   }
 
@@ -292,7 +298,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("channel_icons", &g_bChannelIcons))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'channel_icons' setting, falling back to '%b' as default", DEFAULT_CHANNEL_ICONS);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'channel_icons' setting, falling back to '%u' as default", DEFAULT_CHANNEL_ICONS);
     g_bChannelIcons = DEFAULT_CHANNEL_ICONS;
   }
 
@@ -300,7 +306,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("recording_icons", &g_bRecordingIcons))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'recording_icons' setting, falling back to '%b' as default", DEFAULT_RECORDING_ICONS);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'recording_icons' setting, falling back to '%u' as default", DEFAULT_RECORDING_ICONS);
     g_bRecordingIcons = DEFAULT_RECORDING_ICONS;
   }
 
@@ -308,77 +314,46 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   if (!XBMC->GetSetting("limit_tune_attempts", &g_bLimitTuneAttempts))
   {
     /* If setting is unknown fallback to defaults */
-    XBMC->Log(LOG_ERROR, "Couldn't get 'limit_tune_attempts' setting, falling back to '%b' as default", DEFAULT_LIMIT_TUNE_ATTEMPTS);
+    XBMC->Log(LOG_ERROR, "Couldn't get 'limit_tune_attempts' setting, falling back to '%u' as default", DEFAULT_LIMIT_TUNE_ATTEMPTS);
     g_bLimitTuneAttempts = DEFAULT_LIMIT_TUNE_ATTEMPTS;
+  }
+
+  /* Read setting "inactive_upcomings" from settings.xml */
+  if (!XBMC->GetSetting("inactive_upcomings", &g_bShowNotRecording))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'inactive_upcomings' setting, falling back to '%u' as default", DEFAULT_SHOW_NOT_RECORDING);
+    g_bShowNotRecording = DEFAULT_SHOW_NOT_RECORDING;
+  }
+
+  /* Read setting "prompt_delete" from settings.xml */
+  if (!XBMC->GetSetting("prompt_delete", &g_bPromptDeleteAtEnd))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'prompt_delete' setting, falling back to '%u' as default", DEFAULT_PROMPT_DELETE);
+    g_bPromptDeleteAtEnd = DEFAULT_PROMPT_DELETE;
+  }
+
+  /* Read setting "livetv_recordings" from settings.xml */
+  if (!XBMC->GetSetting("livetv_recordings", &g_bLiveTVRecordings))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'livetv_recordings' setting, falling back to '%u' as default", DEFAULT_LIVETV_RECORDINGS);
+    g_bLiveTVRecordings = DEFAULT_LIVETV_RECORDINGS;
+  }
+
+  /* Read setting "backend_bookmarks" from settings.xml */
+  if (!XBMC->GetSetting("backend_bookmarks", &g_bUseBackendBookmarks))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'backend_bookmarks' setting, falling back to '%u' as default", DEFAULT_BACKEND_BOOKMARKS);
+    g_bUseBackendBookmarks = DEFAULT_BACKEND_BOOKMARKS;
   }
 
   free (buffer);
   XBMC->Log(LOG_DEBUG, "Loading settings...done");
 
-  // Create our addon
-  XBMC->Log(LOG_DEBUG, "Creating MythTV client...");
-  g_client = new PVRClientMythTV();
-  if (!g_client->Connect())
-  {
-    switch(g_client->GetConnectionError())
-    {
-      case PVRClientMythTV::CONN_ERROR_UNKNOWN_VERSION:
-      {
-        // HEADING: Connection failed
-        // Failed to connect the MythTV backend with the known protocol versions.
-        // Do you want to retry ?
-        std::string msg = XBMC->GetLocalizedString(30300);
-        msg.append("\n").append(XBMC->GetLocalizedString(30113));
-        GUIDialogYesNo dialog(XBMC->GetLocalizedString(30112), msg.c_str(), 1);
-        dialog.Open();
-        if (dialog.IsNo())
-          m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE;
-        else
-          m_CurStatus = ADDON_STATUS_NEED_SETTINGS;
-        break;
-      }
-      case PVRClientMythTV::CONN_ERROR_API_UNAVAILABLE:
-      {
-        // HEADING: Connection failed
-        // Failed to connect the API services of MythTV backend. Please check your PIN code or backend setup.
-        // Do you want to retry ?
-        std::string msg = XBMC->GetLocalizedString(30301);
-        msg.append("\n").append(XBMC->GetLocalizedString(30113));
-        GUIDialogYesNo dialog(XBMC->GetLocalizedString(30112), msg.c_str(), 1);
-        dialog.Open();
-        if (dialog.IsNo())
-          m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE;
-        else
-          m_CurStatus = ADDON_STATUS_NEED_SETTINGS;
-        break;
-      }
-      default:
-        if (g_bNotifyAddonFailure)
-        {
-          XBMC->QueueNotification(QUEUE_ERROR, XBMC->GetLocalizedString(30304)); // No response from MythTV backend
-          g_bNotifyAddonFailure = false; // No more notification
-        }
-        m_CurStatus = ADDON_STATUS_NEED_SETTINGS;
-    }
-    SAFE_DELETE(g_client);
-    SAFE_DELETE(CODEC);
-    SAFE_DELETE(GUI);
-    SAFE_DELETE(PVR);
-    SAFE_DELETE(XBMC);
-    return m_CurStatus;
-  }
-  XBMC->Log(LOG_DEBUG, "Creating MythTV client...done");
-
-  /* Read setting "LiveTV Priority" from backend database */
-  bool savedLiveTVPriority;
-  if (!XBMC->GetSetting("livetv_priority", &savedLiveTVPriority))
-    savedLiveTVPriority = DEFAULT_LIVETV_PRIORITY;
-  g_bLiveTVPriority = g_client->GetLiveTVPriority();
-  if (g_bLiveTVPriority != savedLiveTVPriority)
-  {
-    g_client->SetLiveTVPriority(savedLiveTVPriority);
-  }
-
+  // Create menu hooks
   XBMC->Log(LOG_DEBUG, "Creating menu hooks...");
   PVR_MENUHOOK menuHook;
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
@@ -389,7 +364,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
 
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
   menuHook.category = PVR_MENUHOOK_RECORDING;
-  menuHook.iHookId = MENUHOOK_KEEP_LIVETV_RECORDING;
+  menuHook.iHookId = MENUHOOK_KEEP_RECORDING;
   menuHook.iLocalizedStringId = 30412;
   PVR->AddMenuHook(&menuHook);
 
@@ -398,7 +373,7 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   menuHook.iHookId = MENUHOOK_TIMER_BACKEND_INFO;
   menuHook.iLocalizedStringId = 30424;
   PVR->AddMenuHook(&menuHook);
-  
+
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
   menuHook.category = PVR_MENUHOOK_TIMER;
   menuHook.iHookId = MENUHOOK_SHOW_HIDE_NOT_RECORDING;
@@ -419,10 +394,29 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
 
   XBMC->Log(LOG_DEBUG, "Creating menu hooks...done");
 
-  XBMC->Log(LOG_DEBUG, "Addon created successfully");
-  m_CurStatus = ADDON_STATUS_OK;
+  // Create our addon
+  XBMC->Log(LOG_DEBUG, "Creating MythTV client...");
+  g_client = new PVRClientMythTV();
   g_bCreated = true;
+
+  XBMC->Log(LOG_DEBUG, "Creating launcher...");
+  g_launcher = new PVRClientLauncher(g_client);
+  if (g_launcher->CreateThread(true))
+  {
+    XBMC->Log(LOG_NOTICE, "Addon created successfully");
+    m_CurStatus = ADDON_STATUS_OK;
+  }
+  else
+  {
+    XBMC->Log(LOG_ERROR, "Addon launcher failure");
+    ADDON_Destroy();
+    m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE;
+  }
   return m_CurStatus;
+}
+
+void ADDON_Stop()
+{
 }
 
 void ADDON_Destroy()
@@ -430,7 +424,9 @@ void ADDON_Destroy()
   if (g_bCreated)
   {
     g_bCreated = false;
+    SAFE_DELETE(g_launcher);
     SAFE_DELETE(g_client);
+    XBMC->Log(LOG_NOTICE, "Addon destroyed.");
     SAFE_DELETE(CODEC);
     SAFE_DELETE(PVR);
     SAFE_DELETE(XBMC);
@@ -465,6 +461,7 @@ void ADDON_Announce(const char *flag, const char *sender, const char *message, c
     }
   }
 }
+
 
 ADDON_STATUS ADDON_GetStatus()
 {
@@ -530,12 +527,6 @@ ADDON_STATUS ADDON_SetSetting(const char *settingName, const void *settingValue)
     if (tmp_sWSSecurityPin != g_szWSSecurityPin)
       return ADDON_STATUS_NEED_RESTART;
   }
-  else if (str == "demuxing")
-  {
-    XBMC->Log(LOG_INFO, "Changed Setting 'demuxing' from %u to %u", g_bDemuxing, *(bool*)settingValue);
-    if (g_bDemuxing != *(bool*)settingValue)
-      return ADDON_STATUS_NEED_RESTART;
-  }
   else if (str == "channel_icons")
   {
     XBMC->Log(LOG_INFO, "Changed Setting 'channel_icons' from %u to %u", g_bChannelIcons, *(bool*)settingValue);
@@ -546,6 +537,12 @@ ADDON_STATUS ADDON_SetSetting(const char *settingName, const void *settingValue)
   {
     XBMC->Log(LOG_INFO, "Changed Setting 'recording_icons' from %u to %u", g_bRecordingIcons, *(bool*)settingValue);
     if (g_bRecordingIcons != *(bool*)settingValue)
+      return ADDON_STATUS_NEED_RESTART;
+  }
+  else if (str == "backend_bookmarks")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'backend_bookmarks' from %u to %u", g_bUseBackendBookmarks, *(bool*)settingValue);
+    if (g_bUseBackendBookmarks != *(bool*)settingValue)
       return ADDON_STATUS_NEED_RESTART;
   }
   else if (str == "host_ether")
@@ -654,6 +651,15 @@ ADDON_STATUS ADDON_SetSetting(const char *settingName, const void *settingValue)
       PVR->TriggerRecordingUpdate();
     }
   }
+  else if (str == "use_airdate")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'use_airdate' from %u to %u", g_bUseAirdate, *(bool*)settingValue);
+    if (g_bUseAirdate != *(bool*)settingValue)
+    {
+      g_bUseAirdate = *(bool*)settingValue;
+      PVR->TriggerRecordingUpdate();
+    }
+  }
   else if (str == "enable_edl")
   {
     XBMC->Log(LOG_INFO, "Changed Setting 'enable_edl' from %u to %u", g_iEnableEDL, *(int*)settingValue);
@@ -676,17 +682,36 @@ ADDON_STATUS ADDON_SetSetting(const char *settingName, const void *settingValue)
     if (g_bLimitTuneAttempts != *(bool*)settingValue)
       g_bLimitTuneAttempts = *(bool*)settingValue;
   }
+  else if (str == "inactive_upcomings")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'inactive_upcomings' from %u to %u", g_bShowNotRecording, *(bool*)settingValue);
+    if (g_bShowNotRecording != *(bool*)settingValue)
+    {
+      g_bShowNotRecording = *(bool*)settingValue;
+      if (g_client)
+        g_client->HandleScheduleChange();
+    }
+  }
+  else if (str == "prompt_delete")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'prompt_delete' from %u to %u", g_bPromptDeleteAtEnd, *(bool*)settingValue);
+    if (g_bPromptDeleteAtEnd != *(bool*)settingValue)
+      g_bPromptDeleteAtEnd = *(bool*)settingValue;
+  }
+  else if (str == "livetv_recordings")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'livetv_recordings' from %u to %u", g_bLiveTVRecordings, *(bool*)settingValue);
+    if (g_bLiveTVRecordings != *(bool*)settingValue)
+    {
+      g_bLiveTVRecordings = *(bool*)settingValue;
+      PVR->TriggerRecordingUpdate();
+    }
+  }
   return ADDON_STATUS_OK;
-}
-
-void ADDON_Stop()
-{
-  //ADDON_Destroy();
 }
 
 void ADDON_FreeSettings()
 {
-  return;
 }
 
 
@@ -731,12 +756,12 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES *pCapabilities)
     pCapabilities->bSupportsTimers                = true;
 
     pCapabilities->bHandlesInputStream            = true;
-    pCapabilities->bHandlesDemuxing               = g_bDemuxing;
+    pCapabilities->bHandlesDemuxing               = false;
 
     pCapabilities->bSupportsRecordings            = true;
     pCapabilities->bSupportsRecordingsUndelete    = true;
     pCapabilities->bSupportsRecordingPlayCount    = (version < 80 ? false : true);
-    pCapabilities->bSupportsLastPlayedPosition    = false;
+    pCapabilities->bSupportsLastPlayedPosition    = (version < 88 || !g_bUseBackendBookmarks ? false : true);
     pCapabilities->bSupportsRecordingEdl          = true;
     return PVR_ERROR_NO_ERROR;
   }
@@ -785,6 +810,34 @@ PVR_ERROR CallMenuHook(const PVR_MENUHOOK &menuhook, const PVR_MENUHOOK_DATA &it
     return PVR_ERROR_SERVER_ERROR;
 
   return g_client->CallMenuHook(menuhook, item);
+}
+
+void OnSystemSleep()
+{
+  XBMC->Log(LOG_INFO, "Received event: %s", __FUNCTION__);
+  if (g_client)
+    g_client->OnSleep();
+}
+
+void OnSystemWake()
+{
+  XBMC->Log(LOG_INFO, "Received event: %s", __FUNCTION__);
+  if (g_client)
+    g_client->OnWake();
+}
+
+void OnPowerSavingActivated()
+{
+  XBMC->Log(LOG_INFO, "Received event: %s", __FUNCTION__);
+  if (g_client)
+    g_client->OnDeactivatedGUI();
+}
+
+void OnPowerSavingDeactivated()
+{
+  XBMC->Log(LOG_INFO, "Received event: %s", __FUNCTION__);
+  if (g_client)
+    g_client->OnActivatedGUI();
 }
 
 /*
@@ -925,17 +978,14 @@ PVR_ERROR SetRecordingLastPlayedPosition(const PVR_RECORDING &recording, int las
 {
   if (g_client == NULL)
     return PVR_ERROR_SERVER_ERROR;
-  (void)recording;
-  (void)lastplayedposition;
-  return PVR_ERROR_NOT_IMPLEMENTED;
+  return g_client->SetRecordingLastPlayedPosition(recording, lastplayedposition);
 }
 
 int GetRecordingLastPlayedPosition(const PVR_RECORDING &recording)
 {
   if (g_client == NULL)
     return PVR_ERROR_SERVER_ERROR;
-  (void)recording;
-  return -1;
+  return g_client->GetRecordingLastPlayedPosition(recording);
 }
 
 PVR_ERROR GetRecordingEdl(const PVR_RECORDING &recording, PVR_EDL_ENTRY entries[], int *size)
@@ -1047,13 +1097,13 @@ int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize)
 }
 
 int GetCurrentClientChannel()
-{
-  if (g_client == NULL)
-    return -1;
-
-  return g_client->GetCurrentClientChannel();
-}
-
+ {
+   if (g_client == NULL)
+     return -1;
+ 
+   return g_client->GetCurrentClientChannel();
+ }
+ 
 bool SwitchChannel(const PVR_CHANNEL &channel)
 {
   if (g_client == NULL)
@@ -1109,6 +1159,13 @@ long long LengthLiveStream(void)
   return g_client->LengthLiveStream();
 }
 
+bool IsRealTimeStream(void)
+{
+  if (g_client == NULL)
+    return false;
+
+  return g_client->IsRealTimeStream();
+}
 
 /*
  * PVR Recording Stream Functions
@@ -1164,46 +1221,6 @@ long long LengthRecordedStream(void)
 
 
 /*
- * PVR Demux Functions
- */
-
-PVR_ERROR GetStreamProperties(PVR_STREAM_PROPERTIES* pProperties)
-{
-  if (g_client == NULL)
-    return PVR_ERROR_SERVER_ERROR;
-
-  return g_client->GetStreamProperties(pProperties);
-}
-
-void DemuxAbort(void)
-{
-  if (g_client != NULL)
-    g_client->DemuxAbort();
-}
-
-DemuxPacket* DemuxRead(void)
-{
-  if (g_client == NULL)
-    return NULL;
-
-  return g_client->DemuxRead();
-}
-
-void DemuxFlush(void)
-{
-  if (g_client != NULL)
-    g_client->DemuxFlush();
-}
-
-bool SeekTime(int time, bool backwards, double *startpts)
-{
-  if (g_client != NULL)
-    return g_client->SeekTime(time, backwards, startpts);
-  return false;
-}
-
-
-/*
  * PVR Timeshift Functions
  */
 
@@ -1228,13 +1245,20 @@ time_t GetBufferTimeEnd()
   return 0;
 }
 
+bool IsTimeshifting(void) { return true; }
+
 /*
  * Unused API Functions
  */
 
+PVR_ERROR GetStreamProperties(PVR_STREAM_PROPERTIES *) { return PVR_ERROR_NOT_IMPLEMENTED; }
+void DemuxAbort(void) {}
+DemuxPacket* DemuxRead(void) { return NULL; }
+void DemuxFlush(void) {}
+bool SeekTime(int, bool, double *) { return false; }
 void DemuxReset() {}
 const char * GetLiveStreamURL(const PVR_CHANNEL &) { return ""; }
 void SetSpeed(int) {};
-bool IsTimeshifting(void) { return true; }
+PVR_ERROR SetEPGTimeFrame(int) { return PVR_ERROR_NOT_IMPLEMENTED; }
 
 } //end extern "C"

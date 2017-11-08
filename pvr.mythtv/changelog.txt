@@ -1,5 +1,148 @@
-v3.4.7
+v4.15.3
+- Discard upcoming with an invalid channel
+
+v4.15.2
+- Sync cppmyth upstream (2.9.5)
+- Fix bug in http chunked data transfer
+
+v4.15.0
+- Add new setting to enable/disable usage of backend bookmarks
+
+v4.14.1
+- Fix install path for debian build
+
+v4.14.0
+- No longer handle demuxing
+
+v4.13.2
+- Launch client init in background
+
+v4.13.1
+- New setting to show/hide liveTV recordings
+- Fix: Do not open dialog while playing
+- Fix french translations
+
+v4.12.12
+- Sync cppmyth upstream (2.9.4)
+
+v4.12.11
+- Silent failed bookmark
+
+v4.12.9
+- Sync cppmyth upstream (2.9.3)
+
+v4.12.8
+- Sync demuxer upstream
+- Cleanup addon api
+- Fix error no error reading bookmark
+
+v4.12.7
+- Sync demuxer upstream
+- Fix incorrect hours to display when g_bUseAirdate was set
+
+v4.12.5
+- Sync cppmyth upstream (2.9.2)
+
+v4.12.2
+- Fill flag 'has bookmark' on recordings
+
+v4.12.0
+- An option to prompt to delete a recording after finishing it
+- Adding new section 'Preferences' in settings
+
+v4.11.6
+- Upgrade the demuxer to support hevc stream
+- Add a dialog to retry connect the backend on startup
+
+v4.11.5
+- Replaced custom Dialog class with standard Kodi API call
+
+v4.11.2
+- Sync cppmyth upstream (2.9.1)
+
+v4.11.1
+- Sync cppmyth upstream: fix reader of encoded content
+
+v4.11.0
+- Handle recording last played position from the backend
+- Bookmark at current position in a recording when you press record on LiveTV
+
+v4.10.1
+- Minor bug fixes
+
+v4.10.0
+- Sync cppmyth upstream (2.8.1) with support of content-encoding gzip/deflate for WS API
+
+v4.9.2
+- Updated to PVR addon API v5.2.1
+
+v4.9.0
+- Extra timer info
+
+v4.8.0
+- New setting to send (original) Airdate to Kodi instead of the recording's Start Date/Time.
+
+v4.7.3
+- Recordings: Separate Thumbnail from Icon
+
+v4.7.2
 - Updated language files from Transifex
+
+v4.7.0
+- Sync cppmyth upstream (2.7.0)
+- Support protocol 29-pre:91
+
+v4.6.1
+- Updated language files from Transifex
+
+v4.6.0
+- Sync cppmyth upstream (2.6.0)
+- Support protocol 29-pre:90
+- Support protocol 29-pre:89
+- Allow to keep live show from EPG screen
+
+v4.5.3
+- Updated language files from Transifex
+
+v4.5.2
+- Updated language files from Transifex
+
+v4.5.1
+- Keep original air date of recording on update event from protocol
+- Sync cppmyth upstream (2.5.2)
+
+v4.5.0
+- Cmake: rename find_package kodi to Kodi
+
+v4.4.1
+- Fix includes
+
+v4.4.0
+- Updated to PVR addon API v5.2.0
+
+v4.3.1
+- Sync cppmyth upstream (2.5.1)
+
+v4.3.0
+- Updated to PVR addon API v5.1.0
+
+v4.2.1
+- Fill PVR channel UID of recordings
+- Allowing to disable auto-expire for any recording
+- Minor improvements
+
+v4.2.0
+- Updated to PVR addon API v5.0.0
+
+v4.1.0
+- Updated to PVR API v4.2.0
+- Updated to GUI API v5.11.0
+
+v4.0.1
+- Updated language files from Transifex
+
+v4.0.0
+- Initial Kodi Krypton version.
 
 v3.4.6
 - fix timer update caused by invalid epg ID
