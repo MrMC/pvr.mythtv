@@ -808,7 +808,7 @@ int PVRClientMythTV::FindPVRChannelUid(uint32_t channelId) const
   PVRChannelMap::const_iterator it = m_PVRChannelUidById.find(channelId);
   if (it != m_PVRChannelUidById.end())
     return it->second;
-  return -1;
+  return PVR_CHANNEL_INVALID_UID;
 }
 
 int PVRClientMythTV::GetRecordingsAmount()
@@ -1516,7 +1516,7 @@ PVR_ERROR PVRClientMythTV::GetTimers(ADDON_HANDLE handle)
     tag.endTime = (*it)->endTime;
 
     // Discard upcoming without valid channel uid
-    if (tag.iClientChannelUid == -1 && !(*it)->isRule)
+    if (tag.iClientChannelUid == PVR_CHANNEL_INVALID_UID && !(*it)->isRule)
       continue;
 
     // Status: Match recording status with PVR_TIMER status
