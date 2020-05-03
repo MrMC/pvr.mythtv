@@ -26,6 +26,9 @@
 
 #include <mrmc/xbmc_pvr_dll.h>
 
+///* undefined constants in pvr API */
+#define SEEK_POSSIBLE 0x10 ///< flag used to check if protocol allows seeks
+
 using namespace ADDON;
 
 /* User adjustable settings are saved here.
@@ -64,6 +67,7 @@ bool          g_bLimitTuneAttempts      = DEFAULT_LIMIT_TUNE_ATTEMPTS;
 bool          g_bShowNotRecording       = DEFAULT_SHOW_NOT_RECORDING;
 bool          g_bPromptDeleteAtEnd      = DEFAULT_PROMPT_DELETE;
 bool          g_bUseBackendBookmarks    = DEFAULT_BACKEND_BOOKMARKS;
+bool          g_bRootDefaultGroup       = DEFAULT_ROOT_DEFAULT_GROUP;
 
 ///* Client member variables */
 ADDON_STATUS  m_CurStatus               = ADDON_STATUS_UNKNOWN;
@@ -350,6 +354,14 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
     g_bUseBackendBookmarks = DEFAULT_BACKEND_BOOKMARKS;
   }
 
+  /* Read setting "root_default_group" from settings.xml */
+  if (!XBMC->GetSetting("root_default_group", &g_bRootDefaultGroup))
+  {
+    /* If setting is unknown fallback to defaults */
+    XBMC->Log(LOG_ERROR, "Couldn't get 'root_default_group' setting, falling back to '%u' as default", DEFAULT_ROOT_DEFAULT_GROUP);
+    g_bRootDefaultGroup = DEFAULT_ROOT_DEFAULT_GROUP;
+  }
+
   free (buffer);
   XBMC->Log(LOG_DEBUG, "Loading settings...done");
 
@@ -369,6 +381,12 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   PVR->AddMenuHook(&menuHook);
 
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
+  menuHook.category = PVR_MENUHOOK_RECORDING;
+  menuHook.iHookId = MENUHOOK_INFO_RECORDING;
+  menuHook.iLocalizedStringId = 30425;
+  PVR->AddMenuHook(&menuHook);
+
+  memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
   menuHook.category = PVR_MENUHOOK_TIMER;
   menuHook.iHookId = MENUHOOK_TIMER_BACKEND_INFO;
   menuHook.iLocalizedStringId = 30424;
@@ -381,38 +399,34 @@ ADDON_STATUS ADDON_Create(void *hdl, void *props)
   PVR->AddMenuHook(&menuHook);
 
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
-  menuHook.category = PVR_MENUHOOK_SETTING;
-  menuHook.iHookId = MENUHOOK_REFRESH_CHANNEL_ICONS;
-  menuHook.iLocalizedStringId = 30422;
+  menuHook.category = PVR_MENUHOOK_CHANNEL;
+  menuHook.iHookId = MENUHOOK_TRIGGER_CHANNEL_UPDATE;
+  menuHook.iLocalizedStringId = 30423;
   PVR->AddMenuHook(&menuHook);
 
   memset(&menuHook, 0, sizeof(PVR_MENUHOOK));
-  menuHook.category = PVR_MENUHOOK_SETTING;
-  menuHook.iHookId = MENUHOOK_TRIGGER_CHANNEL_UPDATE;
-  menuHook.iLocalizedStringId = 30423;
+  menuHook.category = PVR_MENUHOOK_EPG;
+  menuHook.iHookId = MENUHOOK_INFO_EPG;
+  menuHook.iLocalizedStringId = 30426;
   PVR->AddMenuHook(&menuHook);
 
   XBMC->Log(LOG_DEBUG, "Creating menu hooks...done");
 
   // Create our addon
-  XBMC->Log(LOG_DEBUG, "Creating MythTV client...");
+  XBMC->Log(LOG_DEBUG, "Starting the client...");
   g_client = new PVRClientMythTV();
+  g_launcher = new PVRClientLauncher(g_client);
   g_bCreated = true;
 
-  XBMC->Log(LOG_DEBUG, "Creating launcher...");
-  g_launcher = new PVRClientLauncher(g_client);
   if (g_launcher->CreateThread(true))
   {
-    XBMC->Log(LOG_NOTICE, "Addon created successfully");
-    m_CurStatus = ADDON_STATUS_OK;
+    XBMC->Log(LOG_NOTICE, "Addon started successfully");
+    return (m_CurStatus = ADDON_STATUS_OK);
   }
-  else
-  {
-    XBMC->Log(LOG_ERROR, "Addon launcher failure");
-    ADDON_Destroy();
-    m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE;
-  }
-  return m_CurStatus;
+
+  XBMC->Log(LOG_ERROR, "Addon failed to start");
+  ADDON_Destroy();
+  return (m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE);
 }
 
 void ADDON_Stop()
@@ -707,6 +721,15 @@ ADDON_STATUS ADDON_SetSetting(const char *settingName, const void *settingValue)
       PVR->TriggerRecordingUpdate();
     }
   }
+  else if (str == "root_default_group")
+  {
+    XBMC->Log(LOG_INFO, "Changed Setting 'root_default_group' from %u to %u", g_bRootDefaultGroup, *(bool*)settingValue);
+    if (g_bRootDefaultGroup != *(bool*)settingValue)
+    {
+      g_bRootDefaultGroup = *(bool*)settingValue;
+      PVR->TriggerRecordingUpdate();
+    }
+  }
   return ADDON_STATUS_OK;
 }
 
@@ -765,10 +788,7 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES *pCapabilities)
     pCapabilities->bSupportsRecordingEdl          = true;
     return PVR_ERROR_NO_ERROR;
   }
-  else
-  {
-    return PVR_ERROR_FAILED;
-  }
+  return PVR_ERROR_FAILED;
 }
 
 const char *GetBackendName()
@@ -1097,12 +1117,9 @@ int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize)
 }
 
 int GetCurrentClientChannel()
- {
-   if (g_client == NULL)
-     return -1;
- 
-   return g_client->GetCurrentClientChannel();
- }
+{
+  return -1;
+}
  
 bool SwitchChannel(const PVR_CHANNEL &channel)
 {
@@ -1199,7 +1216,8 @@ long long SeekRecordedStream(long long iPosition, int iWhence)
 {
   if (g_client == NULL)
     return -1;
-
+  if (iWhence == SEEK_POSSIBLE)
+    return 1;
   return g_client->SeekRecordedStream(iPosition, iWhence);
 }
 

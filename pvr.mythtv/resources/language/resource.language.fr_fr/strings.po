@@ -220,6 +220,10 @@ msgctxt "#30068"
 msgid "Use bookmarks of the backend MythTV"
 msgstr "Utiliser les signets du serveur MythTV"
 
+msgctxt "#30069"
+msgid "Show default recording group as root"
+msgstr "Afficher le groupe par défaut à la racine"
+
 msgctxt "#30100"
 msgid "Protocol version: %i - Database version: %i"
 msgstr "Version du protocole : %i - Version de la base de données : %i"
@@ -239,6 +243,10 @@ msgstr "Connexion échouée"
 msgctxt "#30113"
 msgid "Do you want to retry ?"
 msgstr "Faut-il réessayer ?"
+
+msgctxt "#30114"
+msgid "Connected"
+msgstr "Connecté"
 
 msgctxt "#30300"
 msgid "Failed to connect the MythTV backend with the known protocol versions. Please check the compatibility map of the addon and upgrade your backend to a supported version."
@@ -315,6 +323,14 @@ msgstr "Mettre à jour les chaînes"
 msgctxt "#30424"
 msgid "Show status of scheduling"
 msgstr "Voir le statut de la programmation"
+
+msgctxt "#30425"
+msgid "Show status of recording"
+msgstr "Voir le statut de l'enregistrement"
+
+msgctxt "#30426"
+msgid "Show status of broadcast"
+msgstr "Voir le statut de l'émission"
 
 msgctxt "#30451"
 msgid "Unhandled"

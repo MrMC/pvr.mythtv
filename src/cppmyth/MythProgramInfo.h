@@ -83,10 +83,14 @@ public:
   uint16_t Season() const;
   uint16_t Episode() const;
   time_t Airdate() const;
+  bool IsDamaged() const;
+
+  std::string GroupingTitle() const;
 
 private:
   Myth::ProgramPtr m_proginfo;
   mutable int32_t m_flags;
+  mutable std::string m_groupingTitle;
 
   class Props
   {

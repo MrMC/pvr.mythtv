@@ -178,7 +178,7 @@ msgstr "Jamais"
 
 msgctxt "#30058"
 msgid "Enable commercial skips (EDL)"
-msgstr "Activer le saut des publicités (EDL)"
+msgstr "Activer le saut des publicités (liste de montage)"
 
 msgctxt "#30059"
 msgid "Always"
@@ -216,17 +216,25 @@ msgctxt "#30067"
 msgid "Show LiveTV recordings"
 msgstr "Afficher les enregistrements de la télé en direct"
 
+msgctxt "#30068"
+msgid "Use bookmarks of the backend MythTV"
+msgstr "Utiliser les signets du serveur MythTV"
+
+msgctxt "#30069"
+msgid "Show default recording group as root"
+msgstr "Afficher le groupe par défaut à la racine"
+
 msgctxt "#30100"
 msgid "Protocol version: %i - Database version: %i"
 msgstr "Version du protocole : %i - Version de la base de données : %i"
 
 msgctxt "#30110"
 msgid "Enabling EDL"
-msgstr "Activation de l'EDL"
+msgstr "Activation des listes de montage"
 
 msgctxt "#30111"
 msgid "A cut list or commercial skips have been found.\nDo you want to activate EDL functionality for this show ?"
-msgstr "Une liste de coupures ou des sauts publicitaires ont été trouvés.\nVoulez-vous activer la fonctionnalité EDL pour cette émission?"
+msgstr "Une liste de montage ou de saut de publicités a été trouvée.\nVoulez-vous activer la fonction de listes de montage pour cette émission ?"
 
 msgctxt "#30112"
 msgid "Connection failed"
@@ -234,7 +242,11 @@ msgstr "Échec de connexion"
 
 msgctxt "#30113"
 msgid "Do you want to retry ?"
-msgstr "Voulez-vous ressayer?"
+msgstr "Voulez-vous ressayer ?"
+
+msgctxt "#30114"
+msgid "Connected"
+msgstr "Connecté"
 
 msgctxt "#30300"
 msgid "Failed to connect the MythTV backend with the known protocol versions. Please check the compatibility map of the addon and upgrade your backend to a supported version."
@@ -286,7 +298,7 @@ msgstr "Désactivé"
 
 msgctxt "#30312"
 msgid "No broadcast found"
-msgstr "Aucune diffusion trouvée"
+msgstr "Aucune diffusion n’a été trouvée"
 
 msgctxt "#30411"
 msgid "Delete and re-record"
@@ -311,6 +323,14 @@ msgstr "Déclencher la mise à jour des chaînes"
 msgctxt "#30424"
 msgid "Show status of scheduling"
 msgstr "Afficher l'état de la programmation"
+
+msgctxt "#30425"
+msgid "Show status of recording"
+msgstr "Afficher l'état de l'enregistrement"
+
+msgctxt "#30426"
+msgid "Show status of broadcast"
+msgstr "Afficher l'état de l'émission"
 
 msgctxt "#30451"
 msgid "Unhandled"

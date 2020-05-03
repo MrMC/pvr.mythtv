@@ -29,6 +29,7 @@ using namespace PLATFORM;
 PVRClientLauncher::PVRClientLauncher(PVRClientMythTV* client)
 : m_client(client)
 {
+  //PVR->ConnectionStateChange(m_client->GetBackendName(), PVR_CONNECTION_STATE_CONNECTING, m_client->GetBackendVersion());
 }
 
 PVRClientLauncher::~PVRClientLauncher()
@@ -38,6 +39,11 @@ PVRClientLauncher::~PVRClientLauncher()
   this->StopThread(0); // Wait for thread to stop
 }
 
+bool PVRClientLauncher::WaitForCompletion(unsigned timeout)
+{
+  return m_alarm.Wait(timeout);
+}
+
 void* PVRClientLauncher::Process()
 {
   bool retry = true;
@@ -45,6 +51,7 @@ void* PVRClientLauncher::Process()
   {
     if (m_client->Connect())
     {
+      //PVR->ConnectionStateChange(m_client->GetBackendName(), PVR_CONNECTION_STATE_CONNECTED, m_client->GetBackendVersion());
       /* Read setting "LiveTV Priority" from backend database */
       bool savedLiveTVPriority;
       if (!XBMC->GetSetting("livetv_priority", &savedLiveTVPriority))
@@ -96,5 +103,7 @@ void* PVRClientLauncher::Process()
     }
   }
   XBMC->Log(LOG_NOTICE, "Launcher stopped");
+  // Signal the launcher has finished
+  m_alarm.Broadcast();
   return 0;
 }

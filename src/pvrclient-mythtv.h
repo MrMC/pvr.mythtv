@@ -22,9 +22,8 @@
  */
 
 #include "cppmyth.h"
-#include "fileOps.h"
+#include "artworksmanager.h"
 #include "categories.h"
-#include "filestreaming.h"
 
 #include <mrmc/xbmc_pvr_types.h>
 #include <platform/threads/mutex.h>
@@ -39,7 +38,10 @@
 #include <vector>
 #include <map>
 
-class PVRClientMythTV : public Myth::EventSubscriber, FileConsumer
+class FileStreaming;
+class TaskHandler;
+
+class PVRClientMythTV : public Myth::EventSubscriber
 {
 public:
   PVRClientMythTV();
@@ -49,6 +51,7 @@ public:
   typedef enum
   {
     CONN_ERROR_NO_ERROR,
+    CONN_ERROR_NOT_CONNECTED,
     CONN_ERROR_SERVER_UNREACHABLE,
     CONN_ERROR_UNKNOWN_VERSION,
     CONN_ERROR_API_UNAVAILABLE,
@@ -73,10 +76,8 @@ public:
   void HandleScheduleChange();
   void HandleAskRecording(const Myth::EventMessage& msg);
   void HandleRecordingListChange(const Myth::EventMessage& msg);
+  void PromptDeleteRecording(const MythProgramInfo &prog);
   void RunHouseKeeping();
-
-  // Implement FileConsumer
-  void HandleCleanedCache();
 
   // EPG
   PVR_ERROR GetEPGForChannel(ADDON_HANDLE handle, const PVR_CHANNEL &channel, time_t iStart, time_t iEnd);
@@ -116,7 +117,6 @@ public:
   bool OpenLiveStream(const PVR_CHANNEL &channel);
   void CloseLiveStream();
   int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize);
-  int GetCurrentClientChannel();
   bool SwitchChannel(const PVR_CHANNEL &channel);
   long long SeekLiveStream(long long iPosition, int iWhence);
   long long LengthLiveStream();
@@ -152,14 +152,18 @@ private:
   FileStreaming *m_dummyStream;
   bool m_hang;
   bool m_powerSaving;
+  bool m_stopTV;
 
   /// Returns true when streaming recorded or live
   bool IsPlaying() const;
 
   // Backend
-  FileOps *m_fileOps;
+  ArtworkManager *m_artworksManager;
   MythScheduleManager *m_scheduleManager;
   mutable PLATFORM::CMutex m_lock;
+
+  // Frontend
+  TaskHandler *m_todo;
 
   // Categories
   Categories m_categories;

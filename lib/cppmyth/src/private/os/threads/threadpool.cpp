@@ -203,9 +203,13 @@ CWorker* CThreadPool::PopQueue(CWorkerThread* _thread)
   CLockGuard lock(m_mutex);
   if (!m_suspended)
   {
-    CWorker* worker = m_queue.front();
-    m_queue.pop();
-    return worker;
+    m_queueEmpty.Signal();
+    if (!m_queue.empty())
+    {
+      CWorker* worker = m_queue.front();
+      m_queue.pop();
+      return worker;
+    }
   }
   return NULL;
 }

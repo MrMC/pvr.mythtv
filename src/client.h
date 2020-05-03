@@ -50,8 +50,9 @@
 #define MENUHOOK_KEEP_RECORDING             2
 #define MENUHOOK_TIMER_BACKEND_INFO         3
 #define MENUHOOK_SHOW_HIDE_NOT_RECORDING    4
-#define MENUHOOK_REFRESH_CHANNEL_ICONS      5
 #define MENUHOOK_TRIGGER_CHANNEL_UPDATE     6
+#define MENUHOOK_INFO_RECORDING             7
+#define MENUHOOK_INFO_EPG                   8
 
 #define DEFAULT_TUNE_DELAY                  5
 #define GROUP_RECORDINGS_ALWAYS             0
@@ -67,7 +68,7 @@
 #define DEFAULT_PROMPT_DELETE               false
 #define DEFAULT_LIVETV_RECORDINGS           true
 #define DEFAULT_BACKEND_BOOKMARKS           true
-
+#define DEFAULT_ROOT_DEFAULT_GROUP          false
 /*!
  * @brief PVR macros for string exchange
  */
@@ -119,6 +120,7 @@ extern bool         g_bLimitTuneAttempts;       ///< Limit channel tuning attemp
 extern bool         g_bShowNotRecording;
 extern bool         g_bPromptDeleteAtEnd;
 extern bool         g_bUseBackendBookmarks;
+extern bool         g_bRootDefaultGroup;
 
 extern ADDON::CHelper_libXBMC_addon *XBMC;
 extern CHelper_libXBMC_pvr          *PVR;

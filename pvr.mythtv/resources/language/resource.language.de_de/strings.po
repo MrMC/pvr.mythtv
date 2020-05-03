@@ -196,6 +196,22 @@ msgctxt "#30065"
 msgid "Limit channel tuning attempts"
 msgstr "Reduzieren versuche tuning"
 
+msgctxt "#30066"
+msgid "Show inactive upcomings (alternative/recorded/expired)"
+msgstr "Zeige inaktive bevorstehende Aufnahmen (alternativ/aufgenommen/abgelaufen)"
+
+msgctxt "#30067"
+msgid "Show LiveTV recordings"
+msgstr "LiveTV-Aufnahmen anzeigen"
+
+msgctxt "#30068"
+msgid "Use bookmarks of the backend MythTV"
+msgstr "Verwenden Sie Lesezeichen des Backends MythTV"
+
+msgctxt "#30069"
+msgid "Show default recording group as root"
+msgstr "Standardaufzeichnungsgruppe als root anzeigen"
+
 msgctxt "#30100"
 msgid "Protocol version: %i - Database version: %i"
 msgstr "Protokollversion: %i - Datenbankversion: %i"
@@ -215,6 +231,10 @@ msgstr "Verbindung fehlgeschlagen"
 msgctxt "#30113"
 msgid "Do you want to retry ?"
 msgstr "Erneut versuchen?"
+
+msgctxt "#30114"
+msgid "Connected"
+msgstr "Verbunden"
 
 msgctxt "#30300"
 msgid "Failed to connect the MythTV backend with the known protocol versions. Please check the compatibility map of the addon and upgrade your backend to a supported version."
@@ -287,6 +307,14 @@ msgstr "Kanal-Update auslösen"
 msgctxt "#30424"
 msgid "Show status of scheduling"
 msgstr "Zeige Status der Programmierung"
+
+msgctxt "#30425"
+msgid "Show status of recording"
+msgstr "Zeige Status der Aufnahme"
+
+msgctxt "#30426"
+msgid "Show status of broadcast"
+msgstr "Zeige Status der Ausstrahlung"
 
 msgctxt "#30451"
 msgid "Unhandled"

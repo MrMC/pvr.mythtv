@@ -16,10 +16,19 @@ include_directories(${mrmcplatform_INCLUDE_DIRS}
                     ${MRMC_INCLUDE_DIR}
                     ${PROJECT_SOURCE_DIR}/lib/cppmyth/src)
 
-add_definitions(-DUSE_DEMUX -D__STDC_FORMAT_MACROS)
+add_definitions(-DUSE_DEMUX -D__STDC_FORMAT_MACROS -DBUILD_KODI_ADDON)
 
 if(NOT WIN32)
-  add_options(ALL_LANGUAGES ALL_BUILDS "-fPIC -Wall")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -std=c++11")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wall")
+else()
+  add_definitions(-DTARGET_WINDOWS -D_WINSOCKAPI_
+    -D_USE_32BIT_TIME_T -D_CRT_SECURE_NO_WARNINGS
+    -D_SCL_SECURE_NO_WARNINGS -D__STDC_CONSTANT_MACROS)
+  set(CMAKE_CXX_FLAGS_RELEASE "/MT /W3 /Od /RTC1 /EHsc")
+  set(CMAKE_CXX_FLAGS_DEBUG "/MTd /W3 /Od /RTC1 /EHsc")
+  set(CMAKE_C_FLAGS_RELEASE "/MT /W3")
+  set(CMAKE_C_FLAGS_DEBUG "/MTd /W3")
 endif()
 
 file (GLOB MYTHTV_SOURCES
@@ -38,10 +47,10 @@ endif()
 
 if(NOT WIN32 AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX))
   if(HAS_BUILTIN_SYNC_ADD_AND_FETCH)
-    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
+    add_definitions("-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
   endif()
   if(HAS_BUILTIN_SYNC_SUB_AND_FETCH)
-    add_options(ALL_LANGUAGES ALL_BUILDS "-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
+    add_definitions("-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
   endif()
 endif()
 

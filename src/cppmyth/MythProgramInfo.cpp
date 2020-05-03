@@ -333,3 +333,45 @@ time_t MythProgramInfo::Airdate() const
 {
   return (m_proginfo ? m_proginfo->airdate : 0);
 }
+
+bool MythProgramInfo::IsDamaged() const
+{
+  return ((m_proginfo && (m_proginfo->videoProps & 0x0020)) ? true : false);
+}
+
+std::string MythProgramInfo::GroupingTitle() const
+{
+  if (!m_proginfo || !m_groupingTitle.empty())
+    return m_groupingTitle;
+
+  // UTF-8 is safe when interpreting 7-bit ASCII characters. Therefore, the following
+  // treatments do not require special care about locale
+
+  std::string& sin = m_proginfo->title;
+
+  // truncate title at the first left parenthesis
+  // i.e: "Ad Vitam (1/6)" => "Ad Vitam "
+  size_t p = sin.find('\x28');
+  if (p == std::string::npos || p == 0)
+    p = sin.length();
+  // clean special characters
+  std::string buf;
+  for (size_t i = 0; i < p; ++i)
+  {
+    char c = sin[i];
+    if (c != '\x2f'             // slash
+            && c != '\x5c'      // back-slash
+            && c != '\x5b'      // [
+            && c != '\x5d'      // ]
+            )
+      buf.push_back(c);
+    else
+      buf.push_back('\x20');
+  }
+  // trim trailing spaces
+  p = buf.length();
+  while (p > 0 && isspace((int)(buf[p - 1])))
+    --p;
+  buf.resize(p);
+  return m_groupingTitle = buf;
+}

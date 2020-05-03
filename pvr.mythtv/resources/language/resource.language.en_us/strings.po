@@ -220,6 +220,10 @@ msgctxt "#30113"
 msgid "Do you want to retry ?"
 msgstr "Do you want to retry ?"
 
+msgctxt "#30114"
+msgid "Connected"
+msgstr "Connected"
+
 msgctxt "#30300"
 msgid "Failed to connect the MythTV backend with the known protocol versions. Please check the compatibility map of the addon and upgrade your backend to a supported version."
 msgstr "Failed to connect the MythTV backend with the known protocol versions. Please check the compatibility map of the addon and upgrade your backend to a supported version."
@@ -291,6 +295,14 @@ msgstr "Trigger channels update"
 msgctxt "#30424"
 msgid "Show status of scheduling"
 msgstr "Show status of scheduling"
+
+msgctxt "#30425"
+msgid "Show status of recording"
+msgstr "Show status of recording"
+
+msgctxt "#30426"
+msgid "Show status of broadcast"
+msgstr "Show status of broadcast"
 
 msgctxt "#30451"
 msgid "Unhandled"
